@@ -6,13 +6,13 @@ import json
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 import httpx
-import anthropic
+import google.generativeai as genai
 
 app = FastAPI()
 
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的 AI 助理分身，透過 LINE 和博鳴對話。
 
@@ -33,6 +33,14 @@ SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的 AI 助理分身，透過
 """
 
 conversation_history: dict[str, list] = {}
+
+
+def get_model():
+    genai.configure(api_key=GOOGLE_API_KEY)
+    return genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=SYSTEM_PROMPT,
+    )
 
 
 def verify_signature(body: bytes, signature: str) -> bool:
@@ -93,22 +101,13 @@ async def webhook(request: Request):
         if user_id not in conversation_history:
             conversation_history[user_id] = []
 
-        conversation_history[user_id].append({"role": "user", "content": user_message})
-
-        if len(conversation_history[user_id]) > 20:
-            conversation_history[user_id] = conversation_history[user_id][-20:]
-
         try:
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-            response = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=1024,
-                system=SYSTEM_PROMPT,
-                messages=conversation_history[user_id],
-            )
-            reply_text = response.content[0].text
+            model = get_model()
+            chat = model.start_chat(history=conversation_history[user_id])
+            response = chat.send_message(user_message)
+            reply_text = response.text
 
-            conversation_history[user_id].append({"role": "assistant", "content": reply_text})
+            conversation_history[user_id] = chat.history[-20:]
 
         except Exception as e:
             reply_text = f"博小鳴暫時有點問題，請稍後再試 🙏（{str(e)[:50]}）"
