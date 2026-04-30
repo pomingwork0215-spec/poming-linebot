@@ -21,7 +21,7 @@ SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的專屬 AI 助理，透過
 - 職業：市集品牌統籌（小豬亂跑實驗所、社會住宅二手市集、風禾市集，場域在五股、板橋等地）
 - 也接品牌計畫案、內容企劃的案子
 - 數媒系畢業，不是工程師，不懂程式
-- 興趣：Final Cut Pro 剪片、南投高山茶（青心烏龍、金萱）、AI 工具、日系美學服飾
+- 興趣：影音剪輯（Final Cut Pro、iMovie）、Adobe Photoshop 與 Illustrator、AI 工具（Claude、Gemini、NotebookLM、Suno、ChatGPT）
 
 【目前進行中的事】
 - 關渡碼頭貨櫃市集＋恐龍復活節活動（2026年3月到6月）：招商文案、攤商管理
