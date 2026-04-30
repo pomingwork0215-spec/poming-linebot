@@ -74,7 +74,7 @@ def build_system_with_date() -> str:
 
 async def call_claude(messages: list) -> str:
     response = await claude_client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model="claude-3-5-haiku-20241022",
         max_tokens=1024,
         system=build_system_with_date(),
         messages=messages,
@@ -135,7 +135,7 @@ async def webhook(request: Request):
             reply_text = await call_claude(conversation_history[user_id])
             conversation_history[user_id].append({"role": "assistant", "content": reply_text})
         except Exception as e:
-            reply_text = f"博小鳴暫時有點問題，請稍後再試 🙏（{str(e)[:80]}）"
+            reply_text = f"博小鳴暫時有點問題 🙏\n錯誤：{str(e)[:120]}"
 
         await reply_to_line(reply_token, reply_text)
 
