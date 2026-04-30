@@ -67,16 +67,9 @@ def verify_signature(body: bytes, signature: str) -> bool:
     )
 
 
-def build_system_with_date() -> list:
+def build_system_with_date() -> str:
     now = datetime.now(TZ_TAIPEI).strftime("%Y-%m-%d %H:%M")
-    date_context = f"\n\n## 現在時間\n台北時間：{now}"
-    return [
-        {
-            "type": "text",
-            "text": SYSTEM_PROMPT + date_context,
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
+    return SYSTEM_PROMPT + f"\n\n## 現在時間\n台北時間：{now}"
 
 
 async def call_claude(messages: list) -> str:
