@@ -3,15 +3,19 @@ import hmac
 import base64
 import os
 import json
+from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 import httpx
+import anthropic
 
 app = FastAPI()
 
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+claude_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 
 SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的 AI 助理分身，透過 LINE 和博鳴對話。
 
@@ -20,18 +24,33 @@ SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的 AI 助理分身，透過
 - 職業：市集品牌統籌與管理員（小豬亂跑實驗所、社會住宅二手市集、風禾市集 — 五股、板橋等地）
 - 自由接案：品牌計畫案、內容企劃
 - 居住地：台灣桃園市中壢區
-- 興趣：影音剪輯（Final Cut Pro）、茶文化（南投高山茶）、AI 工具應用、日系美學服飾
+- 學歷：健行科技大學數位多媒體設計系（非工程師背景）
+- 興趣：影音剪輯（Final Cut Pro）、茶文化（南投高山茶、青心烏龍、金萱）、AI 工具應用、日系美學服飾
+
+## 進行中的專案
+- 關渡碼頭貨櫃市集 & 恐龍復活節活動（2026-03 至 2026-06）：招商文案、攤商管理
+- 五股新城市集場域計畫關閉，轉移至板橋廟雲宮（2026-04）
+- AI 影音剪輯教學開發：3D 角色驅動 MV 製作流程
+
+## 重要關係
+- 何振翔：長期品牌合作夥伴（里山織色）
+- 馬燕萍：文化教育協作者（茶館講座）
+- 阿樹（A-Shu）：市集場域管理合作夥伴
 
 ## 你的行為準則
 - 一律使用繁體中文
 - 語氣自然輕鬆，像朋友對話，不要太正式
-- 簡潔有力，不說廢話
+- 簡潔有力，不說廢話，避免重複相似句子
 - 可以幫博鳴查資料、規劃行程、寫文案、腦力激盪、回答各種問題
 - 若需要更多資訊，主動詢問
 - 回覆長度適中，不要太長（LINE 上看長文很痛苦）
+- 博鳴非工程師背景，說明事情用白話、比喻或類比，避免技術術語
+- 寫正式計畫案時才切換正式語氣，平時保持輕鬆
 """
 
 conversation_history: dict[str, list] = {}
+
+TZ_TAIPEI = timezone(timedelta(hours=8))
 
 
 def verify_signature(body: bytes, signature: str) -> bool:
@@ -48,24 +67,26 @@ def verify_signature(body: bytes, signature: str) -> bool:
     )
 
 
-async def call_groq(messages: list) -> str:
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "llama-3.3-70b-versatile",
-                "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + messages,
-                "max_tokens": 1024,
-                "temperature": 0.7,
-            },
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+def build_system_with_date() -> list:
+    now = datetime.now(TZ_TAIPEI).strftime("%Y-%m-%d %H:%M")
+    date_context = f"\n\n## 現在時間\n台北時間：{now}"
+    return [
+        {
+            "type": "text",
+            "text": SYSTEM_PROMPT + date_context,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+
+async def call_claude(messages: list) -> str:
+    response = await claude_client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        system=build_system_with_date(),
+        messages=messages,
+    )
+    return response.content[0].text
 
 
 async def reply_to_line(reply_token: str, text: str):
@@ -118,7 +139,7 @@ async def webhook(request: Request):
             conversation_history[user_id] = conversation_history[user_id][-20:]
 
         try:
-            reply_text = await call_groq(conversation_history[user_id])
+            reply_text = await call_claude(conversation_history[user_id])
             conversation_history[user_id].append({"role": "assistant", "content": reply_text})
         except Exception as e:
             reply_text = f"博小鳴暫時有點問題，請稍後再試 🙏（{str(e)[:80]}）"
