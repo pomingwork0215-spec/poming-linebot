@@ -7,15 +7,12 @@ from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 import httpx
-import anthropic
 
 app = FastAPI()
 
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-
-claude_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 
 SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的 AI 助理分身，透過 LINE 和博鳴對話。
 
@@ -73,13 +70,24 @@ def build_system_with_date() -> str:
 
 
 async def call_claude(messages: list) -> str:
-    response = await claude_client.messages.create(
-        model="claude-3-5-haiku-20241022",
-        max_tokens=1024,
-        system=build_system_with_date(),
-        messages=messages,
-    )
-    return response.content[0].text
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-3-5-haiku-20241022",
+                "max_tokens": 1024,
+                "system": build_system_with_date(),
+                "messages": messages,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()["content"][0]["text"]
 
 
 async def reply_to_line(reply_token: str, text: str):
@@ -135,7 +143,7 @@ async def webhook(request: Request):
             reply_text = await call_claude(conversation_history[user_id])
             conversation_history[user_id].append({"role": "assistant", "content": reply_text})
         except Exception as e:
-            reply_text = f"博小鳴暫時有點問題 🙏\n錯誤：{str(e)[:120]}"
+            reply_text = f"博小鳴暫時有點問題 🙏\n錯誤：{str(e)[:150]}"
 
         await reply_to_line(reply_token, reply_text)
 
