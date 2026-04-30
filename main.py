@@ -12,7 +12,7 @@ app = FastAPI()
 
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的 AI 助理分身，透過 LINE 和博鳴對話。
 
@@ -70,24 +70,26 @@ def build_system_with_date() -> str:
 
 
 async def call_claude(messages: list) -> str:
+    gemini_messages = [
+        {
+            "role": "model" if msg["role"] == "assistant" else "user",
+            "parts": [{"text": msg["content"]}],
+        }
+        for msg in messages
+    ]
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}",
+            headers={"content-type": "application/json"},
             json={
-                "model": "claude-3-5-haiku-20241022",
-                "max_tokens": 1024,
-                "system": build_system_with_date(),
-                "messages": messages,
+                "system_instruction": {"parts": [{"text": build_system_with_date()}]},
+                "contents": gemini_messages,
+                "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.7},
             },
             timeout=30,
         )
         response.raise_for_status()
-        return response.json()["content"][0]["text"]
+        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
 async def reply_to_line(reply_token: str, text: str):
