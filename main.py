@@ -134,6 +134,10 @@ async def webhook(request: Request):
         reply_token = event["replyToken"]
         user_id = event["source"].get("userId", "unknown")
 
+        if user_message.strip() == "我是博鳴":
+            await reply_to_line(reply_token, f"嗨博鳴！你的 LINE User ID 是：\n{user_id}\n\n複製這串給 Claude Code 就可以完成市集排程設定囉～")
+            return JSONResponse(content={"status": "ok"})
+
         if user_id not in conversation_history:
             conversation_history[user_id] = []
 
