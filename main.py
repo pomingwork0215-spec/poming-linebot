@@ -16,6 +16,10 @@ LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 STALL_MAP_URL = "https://raw.githubusercontent.com/pomingwork0215-spec/poming-linebot/main/assets/stall-map.jpg"
+LINE_USER_ID = "Uf22e9c4891b5e67dd8fa6f80ccb56696"
+
+# 記憶最近一次的攤位文案（伺服器重啟後會清空，但通常可撐過一夜）
+_last_stall_text: str | None = None
 
 SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的專屬 AI 助理，透過 LINE 和他對話。你不是普通聊天機器人，你是真正懂博鳴、能實際幫他處理事情的助理。
 
@@ -124,8 +128,27 @@ def generate_stall_text(stalls: dict) -> str:
     return "\n".join(lines)
 
 
+async def push_line_message(text: str):
+    """主動推送文字訊息給博鳴"""
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+            },
+            json={
+                "to": LINE_USER_ID,
+                "messages": [{"type": "text", "text": text}],
+            },
+            timeout=30,
+        )
+
+
 async def reply_stall_arrangement(reply_token: str, stall_text: str):
-    """回覆攤位圖＋配置文案"""
+    """回覆攤位圖＋配置文案，並儲存文案供 13:30 使用"""
+    global _last_stall_text
+    _last_stall_text = stall_text
     async with httpx.AsyncClient() as client:
         await client.post(
             "https://api.line.me/v2/bot/message/reply",
@@ -185,6 +208,20 @@ async def reply_to_line(reply_token: str, text: str):
             },
             timeout=30,
         )
+
+
+@app.get("/send-today-stall")
+async def send_today_stall():
+    """13:30 排程呼叫此端點，傳送今日攤位確認文案給博鳴"""
+    global _last_stall_text
+    if _last_stall_text:
+        confirm_text = f"📋 今日攤位文案確認：\n\n{_last_stall_text}\n\n確認沒問題的話，複製發到社群吧！"
+        await push_line_message(confirm_text)
+        return {"status": "ok", "mode": "stored"}
+    else:
+        remind_text = "📢 13:30 囉！\n\n昨晚的攤位資料找不到，請把今天的攤位安排傳給博小鳴：\n\n1號：攤商名\n2號：攤商名\n3號：攤商名\n4號：攤商名"
+        await push_line_message(remind_text)
+        return {"status": "ok", "mode": "fallback"}
 
 
 @app.get("/")
