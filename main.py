@@ -257,7 +257,7 @@ async def send_today_stall():
 @app.get("/send-arrived")
 async def send_arrived():
     """16:30 排程呼叫，自動生成攤商到齊通知"""
-    prompt = "生成一則攤商已到齊、邀請大家來妙雲宮的 LINE 社群通知。規則：開頭必須是 @All（A 大寫）、一到兩句話、語氣誇張有趣像在呼朋引伴吃好料、絕對不要出現「市集」這個詞、用「來逛逛」「來吃」「快來」之類的口語、加 1~2 個 emoji、每次都要不一樣。只輸出文案，不要其他說明。"
+    prompt = "注意：絕對禁止出現「市集」這個詞。生成一則攤商已到齊、邀請大家來妙雲宮的 LINE 社群通知。開頭必須是 @All（A 大寫）、一到兩句話、語氣誇張有趣像在呼朋引伴吃好料、用「來逛逛」「快來吃」「快來」之類的口語表達、加 1~2 個 emoji、每次都要不一樣。只輸出文案本身，不要任何說明。"
     text = await call_claude([{"role": "user", "content": prompt}])
     await push_line_message(text)
     return {"status": "ok"}
