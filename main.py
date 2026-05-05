@@ -3,6 +3,7 @@ import hmac
 import base64
 import os
 import json
+import re
 from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -13,6 +14,8 @@ app = FastAPI()
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+
+STALL_MAP_URL = "https://raw.githubusercontent.com/pomingwork0215-spec/poming-linebot/main/assets/stall-map.jpg"
 
 SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的專屬 AI 助理，透過 LINE 和他對話。你不是普通聊天機器人，你是真正懂博鳴、能實際幫他處理事情的助理。
 
@@ -53,6 +56,8 @@ conversation_history: dict[str, list] = {}
 
 TZ_TAIPEI = timezone(timedelta(hours=8))
 
+WEEKDAY_ZH = {"1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六", "7": "日"}
+
 
 def verify_signature(body: bytes, signature: str) -> bool:
     if not LINE_CHANNEL_SECRET:
@@ -71,6 +76,79 @@ def verify_signature(body: bytes, signature: str) -> bool:
 def build_system_with_date() -> str:
     now = datetime.now(TZ_TAIPEI).strftime("%Y-%m-%d %H:%M")
     return SYSTEM_PROMPT + f"\n\n## 現在時間\n台北時間：{now}"
+
+
+def is_stall_arrangement(message: str) -> bool:
+    """判斷是否為攤位安排格式（含 1號: 或 1號：）"""
+    return bool(re.search(r'[1-4]號\s*[：:]', message))
+
+
+def parse_stall_arrangement(message: str) -> dict:
+    """解析攤位安排，回傳 {1: '攤商名｜描述', ...}"""
+    stalls = {}
+    pattern = r'([1-4])號\s*[：:]\s*([^\n]+)'
+    for match in re.finditer(pattern, message):
+        pos = int(match.group(1))
+        vendor = match.group(2).strip()
+        if vendor and vendor not in ['空', '無', '']:
+            stalls[pos] = vendor
+    return stalls
+
+
+def generate_stall_text(stalls: dict) -> str:
+    """生成板橋妙雲宮攤位配置文案"""
+    tomorrow = datetime.now(TZ_TAIPEI) + timedelta(days=1)
+    date_str = f"{tomorrow.month}/{tomorrow.day}"
+    weekday = WEEKDAY_ZH.get(tomorrow.strftime("%u"), "")
+
+    lines = [
+        "《板橋妙雲宮市集區》",
+        f"{date_str}（{weekday}） 攤位配置更新如下",
+    ]
+
+    for pos in sorted(stalls.keys()):
+        vendor = stalls[pos]
+        # 若有描述（含 | 或 ｜），格式：@攤商｜描述；否則：@攤商
+        if '｜' in vendor or '|' in vendor:
+            parts = re.split(r'[｜|]', vendor, 1)
+            lines.append(f"{pos}號：@{parts[0].strip()}｜{parts[1].strip()}")
+        else:
+            lines.append(f"{pos}號：@{vendor}")
+
+    lines += [
+        "以下提醒：",
+        "① 請落地攤卸貨完務必將車輛移出場域",
+        "② 請2號攤位請不要正對廟門",
+        "！！~謝謝老闆的配合～！！",
+    ]
+    return "\n".join(lines)
+
+
+async def reply_stall_arrangement(reply_token: str, stall_text: str):
+    """回覆攤位圖＋配置文案"""
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            "https://api.line.me/v2/bot/message/reply",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {
+                        "type": "image",
+                        "originalContentUrl": STALL_MAP_URL,
+                        "previewImageUrl": STALL_MAP_URL,
+                    },
+                    {
+                        "type": "text",
+                        "text": stall_text,
+                    },
+                ],
+            },
+            timeout=30,
+        )
 
 
 async def call_claude(messages: list) -> str:
@@ -133,6 +211,14 @@ async def webhook(request: Request):
         user_message = event["message"]["text"]
         reply_token = event["replyToken"]
         user_id = event["source"].get("userId", "unknown")
+
+        # 攤位安排模式：偵測到 1號: 格式，自動回傳攤位圖＋文案
+        if is_stall_arrangement(user_message):
+            stalls = parse_stall_arrangement(user_message)
+            if stalls:
+                stall_text = generate_stall_text(stalls)
+                await reply_stall_arrangement(reply_token, stall_text)
+                return JSONResponse(content={"status": "ok"})
 
         if user_id not in conversation_history:
             conversation_history[user_id] = []
