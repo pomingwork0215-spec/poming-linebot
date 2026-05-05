@@ -18,8 +18,9 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 STALL_MAP_URL = "https://raw.githubusercontent.com/pomingwork0215-spec/poming-linebot/main/assets/stall-map.jpg"
 LINE_USER_ID = "Uf22e9c4891b5e67dd8fa6f80ccb56696"
 
-# 記憶最近一次的攤位文案（伺服器重啟後會清空，但通常可撐過一夜）
-_last_stall_text: str | None = None
+# 記憶最近一次的攤位資料（伺服器重啟後會清空，但通常可撐過一夜）
+_last_stall_text: str | None = None       # 配置文案（回給攤商看的）
+_last_stall_vendors: list | None = None   # 攤商名稱清單（用於生成社群公告）
 
 SYSTEM_PROMPT = """你是「博小鳴」，黃博鳴的專屬 AI 助理，透過 LINE 和他對話。你不是普通聊天機器人，你是真正懂博鳴、能實際幫他處理事情的助理。
 
@@ -99,6 +100,33 @@ def parse_stall_arrangement(message: str) -> dict:
     return stalls
 
 
+def extract_vendor_names(stalls: dict) -> list:
+    """從攤位字典提取攤商名稱（不含描述）"""
+    names = []
+    for pos in sorted(stalls.keys()):
+        vendor = stalls[pos]
+        name = re.split(r'[｜|]', vendor)[0].strip()
+        names.append(name)
+    return names
+
+
+def generate_community_text(vendors: list) -> str:
+    """生成社群公告文案（14:00 格式）"""
+    today = datetime.now(TZ_TAIPEI)
+    date_str = f"{today.month}月{today.day} 日"
+    weekday = WEEKDAY_ZH.get(today.strftime("%u"), "")
+    count = len(vendors)
+
+    lines = [
+        f"日期 {date_str}（{weekday}）",
+        f"活動 【今日 {count} 攤美食】",
+    ]
+    for i, name in enumerate(vendors, 1):
+        lines.append(f"{i}. {name}")
+    lines.append("🍢🍖🧅🥩🌽🍗🥟🍜🍱")
+    return "\n".join(lines)
+
+
 def generate_stall_text(stalls: dict) -> str:
     """生成板橋妙雲宮攤位配置文案"""
     tomorrow = datetime.now(TZ_TAIPEI) + timedelta(days=1)
@@ -145,10 +173,11 @@ async def push_line_message(text: str):
         )
 
 
-async def reply_stall_arrangement(reply_token: str, stall_text: str):
-    """回覆攤位圖＋配置文案，並儲存文案供 13:30 使用"""
-    global _last_stall_text
+async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: list):
+    """回覆攤位圖＋配置文案，並儲存供 13:30 使用"""
+    global _last_stall_text, _last_stall_vendors
     _last_stall_text = stall_text
+    _last_stall_vendors = vendors
     async with httpx.AsyncClient() as client:
         await client.post(
             "https://api.line.me/v2/bot/message/reply",
@@ -212,10 +241,11 @@ async def reply_to_line(reply_token: str, text: str):
 
 @app.get("/send-today-stall")
 async def send_today_stall():
-    """13:30 排程呼叫此端點，傳送今日攤位確認文案給博鳴"""
-    global _last_stall_text
-    if _last_stall_text:
-        confirm_text = f"📋 今日攤位文案確認：\n\n{_last_stall_text}\n\n確認沒問題的話，複製發到社群吧！"
+    """13:30 排程呼叫此端點，傳送今日社群公告文案給博鳴確認"""
+    global _last_stall_vendors
+    if _last_stall_vendors:
+        community_text = generate_community_text(_last_stall_vendors)
+        confirm_text = f"📋 今日社群公告確認：\n\n{community_text}\n\n確認沒問題的話，複製發到社群吧！"
         await push_line_message(confirm_text)
         return {"status": "ok", "mode": "stored"}
     else:
@@ -253,8 +283,9 @@ async def webhook(request: Request):
         if is_stall_arrangement(user_message):
             stalls = parse_stall_arrangement(user_message)
             if stalls:
+                vendors = extract_vendor_names(stalls)
                 stall_text = generate_stall_text(stalls)
-                await reply_stall_arrangement(reply_token, stall_text)
+                await reply_stall_arrangement(reply_token, stall_text, vendors)
                 return JSONResponse(content={"status": "ok"})
 
         if user_id not in conversation_history:
