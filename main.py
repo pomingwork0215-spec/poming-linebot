@@ -254,6 +254,24 @@ async def send_today_stall():
         return {"status": "ok", "mode": "fallback"}
 
 
+@app.get("/send-arrived")
+async def send_arrived():
+    """16:30 排程呼叫，自動生成攤商到齊通知"""
+    prompt = "生成一則「攤商已到齊板橋妙雲宮」的 LINE 社群通知。規則：開頭必須是 @All（A 大寫）、一到兩句話、語氣輕鬆活潑、加 1~2 個 emoji、每次都要不一樣。只輸出文案，不要其他說明。"
+    text = await call_claude([{"role": "user", "content": prompt}])
+    await push_line_message(text)
+    return {"status": "ok"}
+
+
+@app.get("/send-come-now")
+async def send_come_now():
+    """18:30 排程呼叫，自動生成晚餐吆喝文案"""
+    prompt = "生成一則「晚餐時間快來板橋妙雲宮」的 LINE 社群訊息。規則：不用 @All 開頭、強調晚餐時間或夜晚氛圍、口語化像跟朋友說話、加 1~2 個 emoji、每次都要不一樣。只輸出文案，不要其他說明。"
+    text = await call_claude([{"role": "user", "content": prompt}])
+    await push_line_message(text)
+    return {"status": "ok"}
+
+
 @app.get("/")
 async def root():
     return {"status": "博小鳴 LINE Bot 運行中 ✅"}
