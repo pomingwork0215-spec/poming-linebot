@@ -17,6 +17,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 STALL_MAP_URL = "https://raw.githubusercontent.com/pomingwork0215-spec/poming-linebot/main/assets/stall-map.jpg"
 LINE_USER_ID = "Uf22e9c4891b5e67dd8fa6f80ccb56696"
+LINE_GROUP_ID = "C84e007a900a9aeb39e9baaf464af008d"  # 風禾社群小幫手
 
 # 記憶最近一次的攤位資料（伺服器重啟後會清空，但通常可撐過一夜）
 _last_stall_text: str | None = None       # 配置文案（回給攤商看的）
@@ -156,8 +157,8 @@ def generate_stall_text(stalls: dict) -> str:
     return "\n".join(lines)
 
 
-async def push_line_message(text: str):
-    """主動推送文字訊息給博鳴"""
+async def push_line_message(text: str, target_id: str = None):
+    """主動推送文字訊息，預設傳給博鳴個人，可指定 target_id 傳到群組"""
     async with httpx.AsyncClient() as client:
         await client.post(
             "https://api.line.me/v2/bot/message/push",
@@ -166,7 +167,7 @@ async def push_line_message(text: str):
                 "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
             },
             json={
-                "to": LINE_USER_ID,
+                "to": target_id or LINE_USER_ID,
                 "messages": [{"type": "text", "text": text}],
             },
             timeout=30,
@@ -256,19 +257,19 @@ async def send_today_stall():
 
 @app.get("/send-arrived")
 async def send_arrived():
-    """16:30 排程呼叫，自動生成攤商到齊通知"""
+    """16:30 排程呼叫，自動生成攤商到齊通知，傳到風禾社群小幫手群組"""
     prompt = "注意：絕對禁止出現「市集」這個詞。生成一則攤商已到齊、邀請大家來妙雲宮的 LINE 社群通知。開頭必須是 @All（A 大寫）、一到兩句話、語氣誇張有趣像在呼朋引伴吃好料、用「來逛逛」「快來吃」「快來」之類的口語表達、加 1~2 個 emoji、每次都要不一樣。只輸出文案本身，不要任何說明。"
     text = await call_claude([{"role": "user", "content": prompt}])
-    await push_line_message(text)
+    await push_line_message(text, target_id=LINE_GROUP_ID)
     return {"status": "ok"}
 
 
 @app.get("/send-come-now")
 async def send_come_now():
-    """18:30 排程呼叫，自動生成晚餐吆喝文案"""
+    """18:30 排程呼叫，自動生成晚餐吆喝文案，傳到風禾社群小幫手群組"""
     prompt = "生成一則「晚餐時間快來板橋妙雲宮」的 LINE 社群訊息。規則：不用 @All 開頭、強調晚餐時間或夜晚氛圍、口語化像跟朋友說話、加 1~2 個 emoji、每次都要不一樣。只輸出文案，不要其他說明。"
     text = await call_claude([{"role": "user", "content": prompt}])
-    await push_line_message(text)
+    await push_line_message(text, target_id=LINE_GROUP_ID)
     return {"status": "ok"}
 
 
