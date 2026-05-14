@@ -129,11 +129,11 @@ def generate_community_text(vendors: list) -> str:
     return "\n".join(lines)
 
 
-def generate_stall_text(stalls: dict) -> str:
+def generate_stall_text(stalls: dict, date_offset: int = 1) -> str:
     """生成板橋妙雲宮攤位配置文案"""
-    tomorrow = datetime.now(TZ_TAIPEI) + timedelta(days=1)
-    date_str = f"{tomorrow.month}/{tomorrow.day}"
-    weekday = WEEKDAY_ZH.get(tomorrow.strftime("%u"), "")
+    target = datetime.now(TZ_TAIPEI) + timedelta(days=date_offset)
+    date_str = f"{target.month}/{target.day}"
+    weekday = WEEKDAY_ZH.get(target.strftime("%u"), "")
 
     lines = [
         "《板橋妙雲宮市集區》",
@@ -331,7 +331,10 @@ async def webhook(request: Request):
             stalls = parse_stall_arrangement(user_message)
             if stalls:
                 vendors = extract_vendor_names(stalls)
-                stall_text = generate_stall_text(stalls)
+                # 13:00–19:59 台北時間視為今天，其他時間視為明天
+                hour = datetime.now(TZ_TAIPEI).hour
+                date_offset = 0 if 13 <= hour <= 19 else 1
+                stall_text = generate_stall_text(stalls, date_offset=date_offset)
                 await reply_stall_arrangement(reply_token, stall_text, vendors)
                 return JSONResponse(content={"status": "ok"})
 
