@@ -112,19 +112,19 @@ def extract_vendor_names(stalls: dict) -> list:
 
 
 def generate_community_text(vendors: list) -> str:
-    """生成社群公告文案（14:00 格式）"""
+    """生成社群公告文案"""
     today = datetime.now(TZ_TAIPEI)
-    date_str = f"{today.month}月{today.day} 日"
+    date_str = f"{today.month}月{today.day}日"
     weekday = WEEKDAY_ZH.get(today.strftime("%u"), "")
     count = len(vendors)
 
     lines = [
         f"日期 {date_str}（{weekday}）",
-        f"活動 【今日 {count} 攤美食】",
+        f"活動 今日 {count} 攤美食",
+        "公告 熱銷 超值 推爆 必買 口袋名單",
     ]
-    for i, name in enumerate(vendors, 1):
-        lines.append(f"{i}. {name}")
-    lines.append("🍢🍖🧅🥩🌽🍗🥟🍜🍱")
+    for name in vendors:
+        lines.append(f"✅ {name}")
     return "\n".join(lines)
 
 
@@ -175,7 +175,7 @@ async def push_line_message(text: str, target_id: str = None):
 
 
 async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: list):
-    """回覆攤位圖＋配置文案，並儲存供 13:30 使用"""
+    """回覆攤位圖＋配置文案，並推送社群公告到風禾群組"""
     global _last_stall_text, _last_stall_vendors
     _last_stall_text = stall_text
     _last_stall_vendors = vendors
@@ -202,6 +202,8 @@ async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: li
             },
             timeout=30,
         )
+    community_text = generate_community_text(vendors)
+    await push_line_message(community_text, target_id=LINE_GROUP_ID)
 
 
 async def call_claude(messages: list) -> str:
