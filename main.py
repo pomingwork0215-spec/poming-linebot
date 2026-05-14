@@ -242,16 +242,15 @@ async def reply_to_line(reply_token: str, text: str):
 
 @app.get("/send-today-stall")
 async def send_today_stall():
-    """13:30 排程呼叫此端點，傳送今日社群公告文案給博鳴確認"""
+    """13:30 排程呼叫此端點，傳送今日攤位公告到風禾社群小幫手群組"""
     global _last_stall_vendors
     if _last_stall_vendors:
         community_text = generate_community_text(_last_stall_vendors)
-        confirm_text = f"📋 今日社群公告確認：\n\n{community_text}\n\n確認沒問題的話，複製發到社群吧！"
-        await push_line_message(confirm_text)
+        await push_line_message(community_text, target_id=LINE_GROUP_ID)
         return {"status": "ok", "mode": "stored"}
     else:
-        remind_text = "📢 13:30 囉！\n\n昨晚的攤位資料找不到，請把今天的攤位安排傳給博小鳴：\n\n1號：攤商名\n2號：攤商名\n3號：攤商名\n4號：攤商名"
-        await push_line_message(remind_text)
+        remind_text = "📢 今日攤位資料尚未設定，請聯繫博鳴確認攤位安排。"
+        await push_line_message(remind_text, target_id=LINE_GROUP_ID)
         return {"status": "ok", "mode": "fallback"}
 
 
