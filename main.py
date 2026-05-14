@@ -296,6 +296,7 @@ async def webhook(request: Request):
         user_message = event["message"]["text"]
         reply_token = event["replyToken"]
         user_id = event["source"].get("userId", "unknown")
+        print(f"[SOURCE] {event['source']}", flush=True)
 
         # 攤位安排模式：偵測到 1號: 格式，自動回傳攤位圖＋文案
         if is_stall_arrangement(user_message):
