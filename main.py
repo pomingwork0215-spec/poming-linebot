@@ -242,16 +242,19 @@ async def reply_to_line(reply_token: str, text: str):
 
 @app.get("/send-today-stall")
 async def send_today_stall():
-    """13:30 排程呼叫此端點，傳送今日攤位公告到風禾社群小幫手群組"""
-    global _last_stall_vendors
-    if _last_stall_vendors:
-        community_text = generate_community_text(_last_stall_vendors)
-        await push_line_message(community_text, target_id=LINE_GROUP_ID)
-        return {"status": "ok", "mode": "stored"}
-    else:
-        remind_text = "📢 今日攤位資料尚未設定，請聯繫博鳴確認攤位安排。"
-        await push_line_message(remind_text, target_id=LINE_GROUP_ID)
-        return {"status": "ok", "mode": "fallback"}
+    """13:30 排程呼叫此端點，詢問今日攤位安排"""
+    taipei_tz = timezone(timedelta(hours=8))
+    today = datetime.now(taipei_tz)
+    weekday_names = ['一', '二', '三', '四', '五', '六', '日']
+    weekday = weekday_names[today.weekday()]
+    date_str = f"{today.month}/{today.day}"
+    msg = (
+        f"📢 板橋妙雲宮今天（{date_str} {weekday}）攤位安排確認！\n\n"
+        "請依格式回覆（空位填「空」或留空）：\n"
+        "1號：\n2號：\n3號：\n4號："
+    )
+    await push_line_message(msg, target_id=LINE_GROUP_ID)
+    return {"status": "ok"}
 
 
 @app.get("/send-arrived")
