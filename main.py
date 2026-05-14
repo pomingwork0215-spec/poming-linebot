@@ -18,6 +18,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 STALL_MAP_URL = "https://raw.githubusercontent.com/pomingwork0215-spec/poming-linebot/main/assets/stall-map.jpg"
 LINE_USER_ID = "Uf22e9c4891b5e67dd8fa6f80ccb56696"
 LINE_GROUP_ID = "C84e007a900a9aeb39e9baaf464af008d"  # 風禾社群小幫手
+STALL_VENDORS_FILE = "/tmp/stall_vendors.json"
 
 # 記憶最近一次的攤位資料（伺服器重啟後會清空，但通常可撐過一夜）
 _last_stall_text: str | None = None       # 配置文案（回給攤商看的）
@@ -176,10 +177,12 @@ async def push_line_message(text: str, target_id: str = None):
 
 
 async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: list):
-    """回覆攤位圖＋配置文案，並推送社群公告到風禾群組"""
+    """回覆攤位圖＋配置文案，並儲存攤商清單供 13:30 自動推播"""
     global _last_stall_text, _last_stall_vendors
     _last_stall_text = stall_text
     _last_stall_vendors = vendors
+    with open(STALL_VENDORS_FILE, "w", encoding="utf-8") as f:
+        json.dump(vendors, f, ensure_ascii=False)
     async with httpx.AsyncClient() as client:
         await client.post(
             "https://api.line.me/v2/bot/message/reply",
@@ -203,8 +206,6 @@ async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: li
             },
             timeout=30,
         )
-    community_text = generate_community_text(vendors)
-    await push_line_message(community_text, target_id=LINE_GROUP_ID)
 
 
 async def call_claude(messages: list) -> str:
@@ -245,7 +246,17 @@ async def reply_to_line(reply_token: str, text: str):
 
 @app.get("/send-today-stall")
 async def send_today_stall():
-    """13:30 排程呼叫此端點，詢問今日攤位安排"""
+    """13:30 排程：有前一晚攤商清單則直接推社群公告，否則退回詢問模式"""
+    try:
+        with open(STALL_VENDORS_FILE, encoding="utf-8") as f:
+            vendors = json.load(f)
+        if vendors:
+            community_text = generate_community_text(vendors)
+            await push_line_message(community_text, target_id=LINE_GROUP_ID)
+            return {"status": "ok"}
+    except Exception:
+        pass
+
     taipei_tz = timezone(timedelta(hours=8))
     today = datetime.now(taipei_tz)
     weekday_names = ['一', '二', '三', '四', '五', '六', '日']
@@ -257,7 +268,7 @@ async def send_today_stall():
         "1號：\n2號：\n3號：\n4號："
     )
     await push_line_message(msg, target_id=LINE_GROUP_ID)
-    return {"status": "ok"}
+    return {"status": "ok", "mode": "fallback"}
 
 
 @app.get("/send-arrived")
