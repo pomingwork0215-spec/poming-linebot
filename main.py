@@ -272,6 +272,28 @@ async def send_come_now():
     return {"status": "ok"}
 
 
+@app.get("/send-confirm-tomorrow")
+async def send_confirm_tomorrow():
+    """20:30 排程呼叫，傳送明日攤位詢問到風禾社群小幫手群組"""
+    taipei_tz = timezone(timedelta(hours=8))
+    tomorrow = datetime.now(taipei_tz) + timedelta(days=1)
+    weekday_names = ['一', '二', '三', '四', '五', '六', '日']
+    weekday = weekday_names[tomorrow.weekday()]
+    date_str = f"{tomorrow.month}/{tomorrow.day}"
+    msg = (
+        f"板橋妙雲宮明天（{date_str} {weekday}）攤位怎麼安排？\n\n"
+        "位置說明：\n"
+        "・1號｜適合大車（靠重慶路側）\n"
+        "・2號｜小攤（廟門前方）\n"
+        "・3號｜適合大車（靠公園路側）\n"
+        "・4號｜小攤（正門右側）\n\n"
+        "請依格式填寫（空位填「空」或留空）：\n"
+        "1號：\n2號：\n3號：\n4號："
+    )
+    await push_line_message(msg, target_id=LINE_GROUP_ID)
+    return {"status": "ok"}
+
+
 @app.get("/")
 async def root():
     return {"status": "博小鳴 LINE Bot 運行中 ✅"}
