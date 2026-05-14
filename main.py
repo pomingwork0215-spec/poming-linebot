@@ -121,7 +121,7 @@ def generate_community_text(vendors: list) -> str:
     lines = [
         f"日期 {date_str}（{weekday}）",
         f"活動 今日 {count} 攤美食",
-        "公告 熱銷 超值 推爆 必買 口袋名單",
+        "🔥🍢🍖🥩🌽🍗🥟🍜🔥",
     ]
     for name in vendors:
         lines.append(f"✅ {name}")
