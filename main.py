@@ -311,6 +311,63 @@ async def send_confirm_tomorrow():
     return {"status": "ok"}
 
 
+@app.get("/send-morning-report")
+async def send_morning_report():
+    """中午12:00 排程呼叫：生成每日早報並傳給博鳴"""
+    now = datetime.now(TZ_TAIPEI)
+    weekday = WEEKDAY_ZH.get(now.strftime("%u"), "")
+    date_str = f"{now.year}-{now.month:02d}-{now.day:02d}"
+
+    # 取得天氣
+    weather_lines = []
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://wttr.in/Zhongli+Taoyuan,Taiwan?format=j1", timeout=10
+            )
+            wdata = r.json()
+            cc = wdata["current_condition"][0]
+            td = wdata["weather"][0]
+            raw_desc = td["hourly"][0]["weatherDesc"][0]["value"]
+            desc_map = {
+                "Sunny": "晴天", "Clear": "晴天",
+                "Partly cloudy": "多雲時晴", "Partly Cloudy": "多雲時晴",
+                "Cloudy": "陰天", "Overcast": "陰天",
+                "Mist": "霧", "Fog": "霧",
+                "Light drizzle": "毛毛雨",
+                "Light rain": "短暫陣雨", "Light rain shower": "短暫陣雨",
+                "Patchy rain possible": "局部有雨",
+                "Moderate rain": "中雨", "Heavy rain": "大雨",
+                "Thundery outbreaks possible": "雷陣雨",
+            }
+            desc_zh = desc_map.get(raw_desc, raw_desc)
+            max_t = td["maxtempC"]
+            min_t = td["mintempC"]
+            feels = cc["FeelsLikeC"]
+            wind = cc["windspeedKmph"]
+            rain = sum(float(h["precipMM"]) for h in td["hourly"])
+            weather_lines.append(f"{desc_zh}，最高 {max_t}°C / 最低 {min_t}°C")
+            weather_lines.append(f"體感溫度 {feels}°C，風速 {wind} km/h")
+            if rain > 0:
+                weather_lines.append(f"預計降雨 {rain:.1f}mm，記得帶傘！")
+    except Exception:
+        weather_lines.append("天氣資料暫時無法取得")
+
+    weather_text = "\n".join(weather_lines)
+    prompt = (
+        f"今天是 {date_str}（{weekday}），台北中壢的天氣：{weather_text}。\n\n"
+        "請幫博鳴生成今天的早報。格式如下，只輸出內容本身，不要任何說明：\n\n"
+        f"☀️ 博鳴早報｜{date_str}（{weekday}）\n\n"
+        f"🌤【今日天氣】\n{weather_text}\n\n"
+        "✅【今日建議優先處理】\n（根據今天是星期幾給 1-2 個具體建議）\n\n"
+        "🎵【今日獨立音樂推薦】\n（台灣或亞洲獨立音樂一首，格式：歌手 - 歌名，一句話說明）\n\n"
+        "💪【今日一句】\n（輕鬆幽默有力量，以「博鳴！」結尾）"
+    )
+    text = await call_claude([{"role": "user", "content": prompt}])
+    await push_line_message(text, target_id=LINE_USER_ID)
+    return {"status": "ok"}
+
+
 @app.get("/")
 async def root():
     return {"status": "博小鳴 LINE Bot 運行中 ✅"}
