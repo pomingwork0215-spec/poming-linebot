@@ -399,9 +399,9 @@ async def webhook(request: Request):
             stalls = parse_stall_arrangement(user_message)
             if stalls:
                 vendors = extract_vendor_names(stalls)
-                # 13:00–19:59 台北時間視為今天，其他時間視為明天
+                # 20:00 以前視為今天，20:00 以後視為明天（配合 20:30 詢問明日攤位的排程）
                 hour = datetime.now(TZ_TAIPEI).hour
-                date_offset = 0 if 13 <= hour <= 19 else 1
+                date_offset = 0 if hour < 20 else 1
                 stall_text = generate_stall_text(stalls, date_offset=date_offset)
                 await reply_stall_arrangement(reply_token, stall_text, vendors)
                 return JSONResponse(content={"status": "ok"})
