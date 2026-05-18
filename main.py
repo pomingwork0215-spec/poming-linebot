@@ -112,9 +112,9 @@ def extract_vendor_names(stalls: dict) -> list:
     return names
 
 
-def generate_community_text(vendors: list) -> str:
+def generate_community_text(vendors: list, date_offset: int = 0) -> str:
     """生成社群公告文案"""
-    today = datetime.now(TZ_TAIPEI)
+    today = datetime.now(TZ_TAIPEI) + timedelta(days=date_offset)
     date_str = f"{today.month}月{today.day}日"
     weekday = WEEKDAY_ZH.get(today.strftime("%u"), "")
     count = len(vendors)
@@ -135,27 +135,23 @@ def generate_stall_text(stalls: dict, date_offset: int = 1) -> str:
     target = datetime.now(TZ_TAIPEI) + timedelta(days=date_offset)
     date_str = f"{target.month}/{target.day}"
     weekday = WEEKDAY_ZH.get(target.strftime("%u"), "")
+    count = len(stalls)
 
     lines = [
         "《板橋妙雲宮市集區》",
-        f"{date_str}（{weekday}） 攤位配置更新如下",
+        f"{date_str}（{weekday}）攤位配置",
+        f"今日共 {count} 攤",
+        "",
     ]
 
     for pos in sorted(stalls.keys()):
         vendor = stalls[pos]
-        # 若有描述（含 | 或 ｜），格式：@攤商｜描述；否則：@攤商
         if '｜' in vendor or '|' in vendor:
             parts = re.split(r'[｜|]', vendor, 1)
             lines.append(f"{pos}號：@{parts[0].strip()}｜{parts[1].strip()}")
         else:
             lines.append(f"{pos}號：@{vendor}")
 
-    lines += [
-        "以下提醒：",
-        "① 請落地攤卸貨完務必將車輛移出場域",
-        "② 請2號攤位請不要正對廟門",
-        "！！~謝謝老闆的配合～！！",
-    ]
     return "\n".join(lines)
 
 
@@ -177,7 +173,7 @@ async def push_line_message(text: str, target_id: str = None):
 
 
 async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: list):
-    """回覆攤位圖＋配置文案，並儲存攤商清單供 13:30 自動推播"""
+    """回覆攤位配置文案，並儲存攤商清單供 13:30 自動推播"""
     global _last_stall_text, _last_stall_vendors
     _last_stall_text = stall_text
     _last_stall_vendors = vendors
@@ -193,11 +189,6 @@ async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: li
             json={
                 "replyToken": reply_token,
                 "messages": [
-                    {
-                        "type": "image",
-                        "originalContentUrl": STALL_MAP_URL,
-                        "previewImageUrl": STALL_MAP_URL,
-                    },
                     {
                         "type": "text",
                         "text": stall_text,
