@@ -135,22 +135,42 @@ def generate_stall_text(stalls: dict, date_offset: int = 1) -> str:
     target = datetime.now(TZ_TAIPEI) + timedelta(days=date_offset)
     date_str = f"{target.month}/{target.day}"
     weekday = WEEKDAY_ZH.get(target.strftime("%u"), "")
-    count = len(stalls)
 
-    lines = [
-        "《板橋妙雲宮市集區》",
-        f"{date_str}（{weekday}）攤位配置",
-        f"今日共 {count} 攤",
-        "",
-    ]
-
-    for pos in sorted(stalls.keys()):
-        vendor = stalls[pos]
-        if '｜' in vendor or '|' in vendor:
-            parts = re.split(r'[｜|]', vendor, 1)
-            lines.append(f"{pos}號：@{parts[0].strip()}｜{parts[1].strip()}")
-        else:
-            lines.append(f"{pos}號：@{vendor}")
+    if date_offset == 0:
+        # 白天回覆（今日攤位）：簡潔格式
+        count = len(stalls)
+        lines = [
+            "《板橋妙雲宮市集區》",
+            f"{date_str}（{weekday}）攤位配置",
+            f"今日共 {count} 攤",
+            "",
+        ]
+        for pos in sorted(stalls.keys()):
+            vendor = stalls[pos]
+            if '｜' in vendor or '|' in vendor:
+                parts = re.split(r'[｜|]', vendor, 1)
+                lines.append(f"{pos}號：@{parts[0].strip()}｜{parts[1].strip()}")
+            else:
+                lines.append(f"{pos}號：@{vendor}")
+    else:
+        # 晚上回覆（確認明日攤位）：原格式含提醒
+        lines = [
+            "《板橋妙雲宮市集區》",
+            f"{date_str}（{weekday}） 攤位配置更新如下",
+        ]
+        for pos in sorted(stalls.keys()):
+            vendor = stalls[pos]
+            if '｜' in vendor or '|' in vendor:
+                parts = re.split(r'[｜|]', vendor, 1)
+                lines.append(f"{pos}號：@{parts[0].strip()}｜{parts[1].strip()}")
+            else:
+                lines.append(f"{pos}號：@{vendor}")
+        lines += [
+            "以下提醒：",
+            "① 請落地攤卸貨完務必將車輛移出場域",
+            "② 請2號攤位請不要正對廟門",
+            "！！~謝謝老闆的配合～！！",
+        ]
 
     return "\n".join(lines)
 
@@ -172,13 +192,21 @@ async def push_line_message(text: str, target_id: str = None):
         )
 
 
-async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: list):
+async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: list, with_image: bool = False):
     """回覆攤位配置文案，並儲存攤商清單供 13:30 自動推播"""
     global _last_stall_text, _last_stall_vendors
     _last_stall_text = stall_text
     _last_stall_vendors = vendors
     with open(STALL_VENDORS_FILE, "w", encoding="utf-8") as f:
         json.dump(vendors, f, ensure_ascii=False)
+    messages = []
+    if with_image:
+        messages.append({
+            "type": "image",
+            "originalContentUrl": STALL_MAP_URL,
+            "previewImageUrl": STALL_MAP_URL,
+        })
+    messages.append({"type": "text", "text": stall_text})
     async with httpx.AsyncClient() as client:
         await client.post(
             "https://api.line.me/v2/bot/message/reply",
@@ -188,12 +216,7 @@ async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: li
             },
             json={
                 "replyToken": reply_token,
-                "messages": [
-                    {
-                        "type": "text",
-                        "text": stall_text,
-                    },
-                ],
+                "messages": messages,
             },
             timeout=30,
         )
@@ -394,7 +417,7 @@ async def webhook(request: Request):
                 hour = datetime.now(TZ_TAIPEI).hour
                 date_offset = 0 if hour < 20 else 1
                 stall_text = generate_stall_text(stalls, date_offset=date_offset)
-                await reply_stall_arrangement(reply_token, stall_text, vendors)
+                await reply_stall_arrangement(reply_token, stall_text, vendors, with_image=(date_offset == 1))
                 return JSONResponse(content={"status": "ok"})
 
         if user_id not in conversation_history:
