@@ -178,7 +178,7 @@ def generate_stall_text(stalls: dict, date_offset: int = 1) -> str:
 async def push_line_message(text: str, target_id: str = None):
     """主動推送文字訊息，預設傳給博鳴個人，可指定 target_id 傳到群組"""
     async with httpx.AsyncClient() as client:
-        await client.post(
+        resp = await client.post(
             "https://api.line.me/v2/bot/message/push",
             headers={
                 "Content-Type": "application/json",
@@ -190,6 +190,8 @@ async def push_line_message(text: str, target_id: str = None):
             },
             timeout=30,
         )
+        if resp.status_code != 200:
+            raise Exception(f"LINE API error {resp.status_code}: {resp.text}")
 
 
 async def reply_stall_arrangement(reply_token: str, stall_text: str, vendors: list, with_image: bool = False):
@@ -321,8 +323,11 @@ async def send_confirm_tomorrow():
         "請依格式填寫（空位填「空」或留空）：\n"
         "1號：\n2號：\n3號：\n4號："
     )
-    await push_line_message(msg, target_id=LINE_GROUP_ID)
-    return {"status": "ok"}
+    try:
+        await push_line_message(msg, target_id=LINE_GROUP_ID)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 
 @app.get("/send-morning-report")
