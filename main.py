@@ -305,6 +305,30 @@ async def send_come_now():
     return {"status": "ok"}
 
 
+@app.get("/debug-push")
+async def debug_push():
+    """除錯用：直接呼叫 LINE push API 並回傳完整回應"""
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+            },
+            json={
+                "to": LINE_GROUP_ID,
+                "messages": [{"type": "text", "text": "除錯測試訊息"}],
+            },
+            timeout=30,
+        )
+        return {
+            "status_code": resp.status_code,
+            "body": resp.text,
+            "group_id": LINE_GROUP_ID,
+            "token_prefix": LINE_CHANNEL_ACCESS_TOKEN[:20] + "..." if LINE_CHANNEL_ACCESS_TOKEN else "空白",
+        }
+
+
 @app.get("/send-confirm-tomorrow")
 async def send_confirm_tomorrow():
     """20:30 排程呼叫，傳送明日攤位詢問到風禾社群小幫手群組"""
