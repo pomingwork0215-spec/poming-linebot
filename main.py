@@ -596,6 +596,11 @@ async def send_temple_duty_tomorrow():
         _temple_duty_image_version += 1
 
         image_url = f"{RENDER_BASE_URL}/temple-duty-image.png?v={_temple_duty_image_version}"
+        greeting = (
+            f"各位志工夥伴們好，{TEMPLE_VENUE_NAME} "
+            f"{tomorrow.strftime('%m/%d')}（{data['weekday_label'][-1]}）"
+            "值班的志工表如下："
+        )
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 "https://api.line.me/v2/bot/message/push",
@@ -605,11 +610,14 @@ async def send_temple_duty_tomorrow():
                 },
                 json={
                     "to": TEMPLE_LINE_GROUP_ID,
-                    "messages": [{
-                        "type": "image",
-                        "originalContentUrl": image_url,
-                        "previewImageUrl": image_url,
-                    }],
+                    "messages": [
+                        {"type": "text", "text": greeting},
+                        {
+                            "type": "image",
+                            "originalContentUrl": image_url,
+                            "previewImageUrl": image_url,
+                        },
+                    ],
                 },
                 timeout=30,
             )
